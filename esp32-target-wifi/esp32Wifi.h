@@ -1,2 +1,1 @@
-void WifiLoop();
-void WifiSetup();
+void wifiSetup();

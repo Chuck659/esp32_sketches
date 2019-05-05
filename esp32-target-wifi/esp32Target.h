@@ -1,0 +1,2 @@
+void targetLoop();
+void targetSetup();
