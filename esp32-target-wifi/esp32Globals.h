@@ -1,3 +1,4 @@
+// Define CREATE in main file
 #ifdef CREATE
 int gTargetState;
 unsigned char gWifiCommand;

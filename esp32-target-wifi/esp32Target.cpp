@@ -1,11 +1,6 @@
 #include <Arduino.h>
 #include "esp32Globals.h"
 
-// Controls some debug output
-#define DEBUG 1
-// Set to 
-
-
 int loopCount = 0;
 unsigned long runTimer = millis();
 //String hitData;

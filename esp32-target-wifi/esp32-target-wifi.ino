@@ -6,8 +6,6 @@
 
 const char *version = "esp32 - version 1 2019-05-02";
 
-int counter = 0;
-
 void setup() {
   Serial.begin(115200);
   Serial.println(millis());
