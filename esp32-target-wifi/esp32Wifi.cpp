@@ -4,6 +4,7 @@
 #include <WebServer.h>
 #include <mDNS.h>
 #include <WiFi.h>
+#include <ESPAsyncWebServer.h>
 
 TaskHandle_t wifiTaskHandle;
 
@@ -30,22 +31,60 @@ int webHitCount = 0;
 int webCount = 0;
 // Last value of hitData received.
 String hitData;
+int lastState = STATUS_UNKNOWN;
 
 // Create the Web Server listening on port 80 (http)
-WebServer server(80);
+//WebServer server(80);
+AsyncWebServer server(80);
+AsyncWebSocket ws("/ws");
+AsyncWebSocketClient* theClient = nullptr;
 
 // Forward defines
 static void sendCommandWithoutData(unsigned char cmd, String cmdName);
 void getLocalStatus();
 String recvSerial(unsigned char *cmd);
 void handlePeerData();
+String getStatus();
 
-// HTTP route handlers (see setup for mapping from URL to function
-//
-// Root route - http://<address>/
-void handleRoot()
-{
-  server.send(200, "text/plain", "hello from esp32!");
+void wsSendStatus(AsyncWebSocketClient * client) {
+  String status = "{ \"type\": \"status\", \"payload\": \"";
+  status += getStatus() + "\"}";
+  client->text(status);
+}
+
+void wsSendData(AsyncWebSocketClient * client, String data) {
+  if (data.length() > 0) {
+    String msg = "{ \"type\": \"data\", \"payload\": \"";
+    msg += data + "\"}";
+    client->text(msg);
+  }
+}
+
+void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
+ 
+  if(type == WS_EVT_CONNECT) {
+    Serial.println("Websocket client connection received");
+    wsSendStatus(client);
+    lastState = gTargetState;
+    wsSendData(client, hitData);
+    theClient = client;
+    hitData = "";
+    
+  } else if(type == WS_EVT_DISCONNECT) {
+    Serial.println("Client disconnected");
+    theClient = nullptr;
+  } else if(type == WS_EVT_DATA){
+    //data packet
+    AwsFrameInfo * info = (AwsFrameInfo*)arg;
+    if(info->final && info->index == 0 && info->len == len){
+      if(info->opcode == WS_TEXT){
+        data[len] = 0;
+        if (strcmp((char*)data, "ping") == 0) {
+          client->text("pong");
+        }
+      } 
+    }
+  }
 }
 
 String getStatus()
@@ -67,7 +106,7 @@ String getStatus()
 }
 
 // Status route - http://<address>/status
-void handleStatus()
+void handleStatus(AsyncWebServerRequest *request)
 {
   webStatusCount++;
   String resp = "{ \"status\": \"";
@@ -85,66 +124,22 @@ void handleStatus()
   default:
     resp += "unknown\"}";
   }
-  server.send(200, "application/json", resp);
+  request->send(200, "application/json", resp);
 }
 
 // Start (run) route - http://<address>/start
-void handleStart()
+void handleStart(AsyncWebServerRequest *request)
 {
   webCount++;
   hitData = "";
-  server.send(200, "application/json", "{}");
+  request->send(200, "application/json", "{}");
   // Send RUN command to arduino
   Serial.println("Run command");
   sendCommandWithoutData(RUNCMD, "run");
 }
 
-// functionX route - http://<address>/functionX
-void handleFunction1()
-{
-  webCount++;
-  server.send(200, "application/json", "{}");
-  sendCommandWithoutData(F1CMD, "Function 1");
-}
-void handleFunction2()
-{
-  webCount++;
-  server.send(200, "application/json", "{}");
-  sendCommandWithoutData(F2CMD, "Function 2");
-}
-void handleFunction3()
-{
-  webCount++;
-  server.send(200, "application/json", "{}");
-  sendCommandWithoutData(F3CMD, "Function 3");
-}
-void handleFunction4()
-{
-  webCount++;
-  server.send(200, "application/json", "{}");
-  sendCommandWithoutData(F4CMD, "Function 4");
-}
-void handleFunction5()
-{
-  webCount++;
-  server.send(200, "application/json", "{}");
-  sendCommandWithoutData(F5CMD, "Function 5");
-}
-void handleFunction6()
-{
-  webCount++;
-  server.send(200, "application/json", "{}");
-  sendCommandWithoutData(F6CMD, "Function 6");
-}
-void handleFunction7()
-{
-  webCount++;
-  server.send(200, "application/json", "{}");
-  sendCommandWithoutData(F7CMD, "Function 7");
-}
-
 // Get hit data route - http://<address>/hitData
-void handleGetHitData()
+void handleGetHitData(AsyncWebServerRequest *request)
 {
   //  Serial.println(String("getHitData: ") + hitData);
   webHitCount++;
@@ -170,15 +165,61 @@ void handleGetHitData()
   json += String("]}");
   if (hitData.length() > 0)
     Serial.println(json);
-  hitData = "";
+//  hitData = "";
 
-  server.send(200, "application/json", json);
+  request->send(200, "application/json", json);
 }
 
-// Default route for all other routes
-void handleNotFound()
-{
-  server.send(404, "application/json", "{\"message\": \"Not Found\"}");
+void setupHandlers() {
+    server.on("/", [](AsyncWebServerRequest* request) {
+      request->send(200, "text/plain", "hello from esp32!");
+  });
+  
+  server.on("/status", handleStatus);
+  server.on("/start", handleStart);
+  server.on("/hitData", handleGetHitData);
+  
+  server.on("/function1", [](AsyncWebServerRequest* request) {
+    request->send(200, "application/json", "{}");
+    sendCommandWithoutData(F1CMD, "Function 1");
+  });
+  
+  server.on("/function2", [](AsyncWebServerRequest* request) {
+    request->send(200, "application/json", "{}");
+    sendCommandWithoutData(F2CMD, "Function 2");
+  });
+  
+  server.on("/function3", [](AsyncWebServerRequest* request) {
+    request->send(200, "application/json", "{}");
+    sendCommandWithoutData(F3CMD, "Function 3");
+  });
+  
+  server.on("/function4", [](AsyncWebServerRequest* request) {
+    request->send(200, "application/json", "{}");
+    sendCommandWithoutData(F4CMD, "Function 4");
+  });
+  
+  server.on("/function5", [](AsyncWebServerRequest* request) {
+    request->send(200, "application/json", "{}");
+    sendCommandWithoutData(F5CMD, "Function 5");
+  });
+  
+  server.on("/function6", [](AsyncWebServerRequest* request) {
+    request->send(200, "application/json", "{}");
+    sendCommandWithoutData(F6CMD, "Function 6");
+  });
+  
+  server.on("/function7", [](AsyncWebServerRequest* request) {
+    request->send(200, "application/json", "{}");
+    sendCommandWithoutData(F7CMD, "Function 7");
+  });
+
+  server.onNotFound([](AsyncWebServerRequest* request) {
+    request->send(404, "application/json", "{\"message\": \"Not Found\"}");
+  });
+
+  ws.onEvent(onWsEvent);
+  server.addHandler(&ws);
 }
 
 void wifiSetupInternal() {
@@ -188,20 +229,21 @@ void wifiSetupInternal() {
   Serial.println();
   Serial.println();
   Serial.print("MAC: ");
-  Serial.println(WiFi.macAddress());
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
   WiFi.mode(WIFI_STA);
+  Serial.println(WiFi.macAddress());
+
   // commented out to allow WiFi to pick address
   //  WiFi.config(ip, gateway, netmask);
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED)
   {
-    delay(500);
+    delay(1000);
     yield();
-    Serial.print(".");
+    Serial.println(WiFi.status());
   }
   Serial.println("");
   Serial.println("WiFi connected");
@@ -220,123 +262,29 @@ void wifiSetupInternal() {
   //   Serial1.println("MDNS responder started");
   // }
 
-  // Setup up the URL routing to handler functions above
-  server.on("/", handleRoot);
-  server.on("/status", handleStatus);
-  server.on("/start", handleStart);
-  server.on("/hitData", handleGetHitData);
-  server.on("/function1", handleFunction1);
-  server.on("/function2", handleFunction2);
-  server.on("/function3", handleFunction3);
-  server.on("/function4", handleFunction4);
-  server.on("/function5", handleFunction5);
-  server.on("/function6", handleFunction6);
-  server.on("/function7", handleFunction7);
-
-  server.onNotFound(handleNotFound);
+  setupHandlers();
 
   delay(100);
 
   Serial.println("");
 
   Serial.println("Wifi setup complete");
-}
-
-// Simple menu for various commands
-void getJobMenu()
-{
-  Serial.println("GETJOB():  enter the item number to run");
-  Serial.println("ITEM    function   Description");
-  Serial.println("0. display menu");
-  Serial.println("1. get local status");
-  Serial.println("2. run exercise");
-  Serial.println("3. get hit data");
-  Serial.println("4. function 1");
-  Serial.println("5. function 2");
-  Serial.println("7. function 3");
-  Serial.println("8. function 4");
-  Serial.println("9. function 5");
-  Serial.println("10. function 6");
-  Serial.println("11. function 7");
-  Serial.println("12. reset arduino");
-  Serial.println("99. EXIT");
+  gWifiReady = true;
 }
 
 // Get action to perform - if no action just monitor interfaces
-void getJob()
-{
-  int jobNumber;
-  getJobMenu();
-  bool done = false;
-  while (!done)
-  {
-    while (!Serial.available())
-    {
-      // Poll interfaces while waiting for user input
-      server.handleClient();
-      handlePeerData();
-    }
-    delay(50);
-    while (Serial.available())
-    {
-      jobNumber = Serial.parseInt();
-      if (Serial.read() != '\n')
-      {
-        Serial.println("going to " + String(jobNumber));
-      }
-    }
-  continue;
-    switch (jobNumber)
-    {
-    case 0:
-      getJobMenu();
-      gTargetState = ((gTargetState + 1) % 3) + 1;
-      Serial.println(String("Running on ") + String(xPortGetCoreID()));
-      break;
-    case 1:
-      getLocalStatus();
-      break;
-    case 2:
-      sendCommandWithoutData(RUNCMD, "run");
-      break;
-    case 3:
-      sendCommandWithoutData(HITDATA, "get hit data");
-      break;
-    case 4:
-      sendCommandWithoutData(F1CMD, "function 1");
-      break;
-    case 5:
-      sendCommandWithoutData(F2CMD, "function 2");
-      break;
-    case 6:
-      sendCommandWithoutData(F3CMD, "function 3");
-      break;
-    case 7:
-      sendCommandWithoutData(F4CMD, "function 4");
-      break;
-    case 8:
-      sendCommandWithoutData(F5CMD, "function 5");
-      break;
-    case 9:
-      sendCommandWithoutData(F6CMD, "function 6");
-      break;
-    case 10:
-      sendCommandWithoutData(F7CMD, "function 7");
-      break;
-    case 11:
-      // resetSlave();
-      break;
-    case 99:
-      done = true;
-      break;
-    } // end of switch
-  }
-  Serial.println("DONE in getJob().");
-}
-
 void wifiLoop()
 {
-  getJob();
+  while (true)
+  {
+    if (theClient && lastState != gTargetState) {
+      wsSendStatus(theClient);
+      lastState = gTargetState;
+    }
+    handlePeerData();
+    yield();
+    delay(10);
+  }
 }
 
 void wifiTask(void*) {
@@ -379,5 +327,9 @@ void handlePeerData() {
     String data = String(gDataBuffer);
     gTargetDataReady = 0;
     hitData = data;
+    if (theClient) {
+      wsSendData(theClient, hitData);
+      hitData = "";
+    }
   }
 }

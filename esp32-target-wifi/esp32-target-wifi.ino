@@ -12,10 +12,22 @@ void setup() {
   Serial.println();
   Serial.print("Version: ");
   Serial.println(version);
-
+  gTargetState = 0;
+  gTargetDataReady = 0;
+  gWifiCommand = 0;
+  gWifiReady = false;
+  pinMode (LED, OUTPUT);
   // put your setup code here, to run once:
-  targetSetup();
   wifiSetup();
+
+  while (!gWifiReady) {
+    digitalWrite(LED, HIGH);
+    delay(500);
+    digitalWrite(LED, LOW);
+    delay(500);
+  }
+  
+  targetSetup();
 }
 
 void loop() {

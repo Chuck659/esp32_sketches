@@ -12,6 +12,7 @@ void targetmove();
 static void getJob();
 void checkRunStatus();
 void sendToPeer(unsigned char cmd, const char* buffer, int len);
+void goIdle();
 
 //
 // ========== target control variables
@@ -19,7 +20,7 @@ void sendToPeer(unsigned char cmd, const char* buffer, int len);
 // based on exerciseall-ver1
 // 3.24.2018 1645hrs
 // first use of device ver3 using: 220rpm, 3hall effect, 1 3-axis accel
-// pins have been changed from ver1
+// pins have been changed f192.168.1.rom ver1
 // 5.18.18 2330hrs using motogolimit w/o time, just Upper & Mid Hall sensors also has 1st use of motohalt()
 // 5.22/18 1900hrs making function to go into sketch "Slave-control-May22"
 // will have motogotime() and motogolimit() at first, will then add some HIT control
@@ -127,6 +128,10 @@ static void getJob(){
   bool done = false;
   getJobMenu();
 
+  uprecord = "Startup time: ";
+  uprecord += String(millis());
+  sendToPeer(HITDATA, uprecord.c_str(), uprecord.length() <= 80 ? uprecord.length() : 80);  // USE THIS
+
   while (!done) {
     while (!Serial.available()){ 
       monitorCmd();
@@ -180,6 +185,7 @@ void monitorCmd() {
         Serial.println("Run command received");
         runTimer = millis();
         targetmove();
+        Serial.println("Run complete");
       break;
       case F1CMD:
         Serial.println("Function 1 command received");
@@ -189,7 +195,11 @@ void monitorCmd() {
       break;
       case F3CMD:
         Serial.println("Function 3 command received");
-        if (gTargetState == STATUS_RUNNING) gTargetState = STATUS_RUN_COMPLETE;
+        if (gTargetState == STATUS_RUNNING) 
+          gTargetState = STATUS_RUN_COMPLETE;
+        else
+          gTargetState = STATUS_IDLE;
+        digitalWrite(LED, LOW);
       break;
       case F4CMD:
         Serial.println("Function 4 command received");
@@ -241,20 +251,30 @@ void setpins(){
   digitalWrite(Lenable3and4, LOW);
   } // end setpins()
 
+void goIdle() {
+  gTargetState = STATUS_IDLE;
+  digitalWrite(LED, LOW);
+}
 
 void motogolimit(){
   Serial.println("IN motogolimit.");
+  digitalWrite(LED, HIGH);
+  uprecord = "Start: ";
+  uprecord += String(millis());
+  uprecord += String(" ");
   gTargetState = STATUS_RUNNING;
-  startuptime = millis();
-  movetime = startuptime;
-  uprecord = "Zu";
-  uprecord += String(startuptime);
-  zval = analogRead(analogPinz);
+  delay(200);
   Serial.println("DONE loop of moving up.");
+  delay(5000);
   gTargetState = STATUS_RUN_COMPLETE;      
   Serial.println("DONE in motogolimit().");
+  uprecord += String(millis());
   sendToPeer(HITDATA, uprecord.c_str(), uprecord.length() <= 80 ? uprecord.length() : 80);  // USE THIS
-  delay(1000);  
+  while (gTargetDataReady) {
+      delay(100);
+  }
+  delay(5000);
+  goIdle();
 } // end motogolimit()
 
 

@@ -1,18 +1,21 @@
 // Define CREATE in main file
 #ifdef CREATE
 int gTargetState;
-unsigned char gWifiCommand;
-unsigned char gTargetDataReady;
-unsigned char gTargetDataLength;
+int gWifiCommand;
+int gTargetDataReady;
+int gTargetDataLength;
 const char* gDataBuffer;
+int gWifiReady;
 #else
 extern int gTargetState;
-extern unsigned char gWifiCommand;
-extern unsigned char gTargetDataReady;
-extern unsigned char gTargetDataLength;
+extern int gWifiCommand;
+extern int gTargetDataReady;
+extern int gTargetDataLength;
 extern const char* gDataBuffer;
+extern int gWifiReady;
 #endif
 
+#define STATUS_UNKNOWN -1
 #define STATUS_IDLE 1
 #define STATUS_RUNNING 2
 #define STATUS_RUN_COMPLETE 3
@@ -31,3 +34,5 @@ extern const char* gDataBuffer;
 #define F6CMD 27
 #define F7CMD 28
 #define ACK 0x40
+
+#define LED 2
